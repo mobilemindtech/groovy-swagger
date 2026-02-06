@@ -5,9 +5,9 @@ import io.gswagger.annotations.ApiContent
 import io.gswagger.annotations.ApiHeader
 import io.gswagger.annotations.ApiMethod
 import io.gswagger.annotations.ApiOperation
+import io.gswagger.annotations.ApiPathParam
 import io.gswagger.annotations.ApiParam
-import io.gswagger.annotations.ApiParameterSchema
-import io.gswagger.annotations.ApiParams
+import io.gswagger.annotations.ApiPathParams
 import io.gswagger.annotations.ApiQueries
 import io.gswagger.annotations.ApiQuery
 import io.gswagger.annotations.ApiRequestBody
@@ -96,7 +96,7 @@ class OpenApiServiceTest {
     }
 
     @ApiResource(path = "/api/user", contents = @ApiContent(contentType = "application/json"))
-    @ApiHeader(name = "X-AUTH", description = "Custom auth token", schema = @ApiParameterSchema(format = "uuid", type = String))
+    @ApiHeader(name = "X-AUTH", description = "Custom auth token", schema = @ApiParam(format = "uuid", type = String))
     @ApiSecurity("JWTAuth")
     class UserController {
         @ApiOperation(method = ApiMethod.POST)
@@ -129,7 +129,7 @@ class OpenApiServiceTest {
         def save2 = {}
 
         @ApiOperation(path = "/{id}", method = ApiMethod.GET)
-        @ApiParams(@ApiParam(name = "id", type = Integer))
+        @ApiPathParams(@ApiPathParam(name = "id", type = Integer))
         @ApiQueries(@ApiQuery(name = "verbose", type = Boolean))
         @ApiResponse(statusCode = 200, body = User)
         def getOne = {}
@@ -147,7 +147,11 @@ class OpenApiServiceTest {
     @Test
     void "Gerar JSON e Validar Estrutura"() {
         def service = new OpenApiService()
-        String json = service.generateJsonScan(Config, "io.gswagger")
+        String json = service.makeJSON(
+                configClass: Config,
+                packageName: "io.gswagger",
+                prettyJson: true
+        )
 
         println json
 

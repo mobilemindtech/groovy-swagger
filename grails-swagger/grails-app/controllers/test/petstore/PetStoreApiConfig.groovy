@@ -1,12 +1,7 @@
 package test.petstore
 
 
-import io.gswagger.annotations.ApiConfig
-import io.gswagger.annotations.ApiSchema
-import io.gswagger.annotations.ApiSchemaField
-import io.gswagger.annotations.ApiSecurityScheme
-import io.gswagger.annotations.ApiServer
-import io.gswagger.annotations.SecurityType
+import io.gswagger.annotations.*
 
 @ApiConfig(
     title = "Pet Store",

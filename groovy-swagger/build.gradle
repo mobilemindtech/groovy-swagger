@@ -33,17 +33,18 @@ dependencies {
 
     // This dependency is exported to consumers, that is to say found on their compile classpath.
     api libs.commons.math3
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-testing {
-    suites {
-        // Configure the built-in test suite
-        test {
-            // Use Spock test framework
-            useSpock('2.4-groovy-4.0')
-        }
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    testLogging {
+        events "passed"
     }
 }
+
 
 // Apply a specific Java toolchain to ease working on different environments.
 java {

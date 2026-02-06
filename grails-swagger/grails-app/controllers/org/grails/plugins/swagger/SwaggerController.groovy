@@ -23,7 +23,7 @@ class SwaggerController {
     def api() {
         try{
             def (configClass, packageName) = loadConfigs()
-            def data = openApiService.generateJsonScan(configClass, packageName)
+            def data = openApiService.makeJSON(configClass: configClass, packageName: packageName)
             header("Access-Control-Allow-Origin", request.getHeader('Origin'))
             render(status: 200, contentType: "application/json", text: data)
         }catch (Exception err){

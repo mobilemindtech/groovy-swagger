@@ -2,6 +2,7 @@ package io.gswagger.core
 
 import com.google.common.reflect.ClassPath
 import groovy.json.JsonBuilder
+import groovy.transform.TupleConstructor
 import groovy.util.logging.Slf4j
 import io.gswagger.annotations.ApiConfig
 import io.gswagger.annotations.ApiContent
@@ -10,9 +11,9 @@ import io.gswagger.annotations.ApiCookies
 import io.gswagger.annotations.ApiHeader
 import io.gswagger.annotations.ApiHeaders
 import io.gswagger.annotations.ApiOperation
+import io.gswagger.annotations.ApiPathParam
 import io.gswagger.annotations.ApiParam
-import io.gswagger.annotations.ApiParameterSchema
-import io.gswagger.annotations.ApiParams
+import io.gswagger.annotations.ApiPathParams
 import io.gswagger.annotations.ApiQueries
 import io.gswagger.annotations.ApiQuery
 import io.gswagger.annotations.ApiRequestBody
@@ -37,45 +38,63 @@ import java.util.stream.Collectors
 @Slf4j
 class OpenApiService {
 
-    private Map components = [schemas: [:], securitySchemes: [:]]
-
-    String generateJsonScan(Class configClass, String packageName){
-        def classes = findAllClassesInPackage(packageName)
-        generateJson(configClass, classes.toList())
+    @TupleConstructor
+    static class Config {
+        Class configClass
+        String packageName
+        List<Class> classes
+        boolean prettyJson
     }
 
-    String generateJson(Class configClass, List<Class> controllerClasses) {
+    private Map components = [schemas: [:], securitySchemes: [:]]
 
-        def config = configClass.getAnnotation(ApiConfig) as ApiConfig
+    String makeJSON(Map config) {
+        makeJSON(new Config(config))
+    }
+    
+    String makeJSON(Config config) {
 
-        assert  config : "ApiConfig annotation is required in config class"
+        assert config.configClass : "configClass is required"
+        assert config.packageName || config.classes : "classes or packageName is required"
 
-        def servers = (configClass.getAnnotation(ApiServers) as ApiServers)?.value()?.toList() ?: []
-        def secSchemes = config.securitySchemes()?.toList() ?: []
-        // 1. Processa Esquemas de Segurança Globais
+        def controllers = config.classes ?: []
+
+        if (config.packageName) {
+            controllers += findAllClassesInPackage(config.packageName)
+        }
+
+        def apiConfig = config.configClass.getAnnotation(ApiConfig) as ApiConfig
+
+        assert apiConfig: "ApiConfig annotation is required in config class"
+
+        def servers = (config.configClass.getAnnotation(ApiServers) as ApiServers)?.value()?.toList() ?: []
+        def secSchemes = apiConfig.securitySchemes()?.toList() ?: []
+
         processSecuritySchemes(secSchemes)
 
         def openApi = [
-            openapi: config.openapi() ?: "3.0.1",
-            info: [title: config.title(), description: config.description(), version: config.version()],
-            servers: (servers + config.servers().toList()).collect {
-                [url: it.url(), description: it.description()]
-            },
+            openapi   : apiConfig.openapi() ?: "3.0.1",
+            info      : [title: apiConfig.title(), description: apiConfig.description(), version: apiConfig.version()],
+            servers   : (servers + apiConfig.servers().toList())
+                        .collect {
+                            [url: it.url(), description: it.description()]
+                        },
             paths: [:],
             components: components
         ]
 
-        def schemas = (configClass.getAnnotation(ApiSchemas) as ApiSchemas)?.value()?.toList() ?: []
-        schemas += config.schemas().toList()
+        def schemas = (config.configClass.getAnnotation(ApiSchemas) as ApiSchemas)?.value()?.toList() ?: []
+        schemas += apiConfig.schemas().toList()
 
         schemas.each { schema ->
             registerSchema(schema)
         }
 
+        controllers.each { processController(apiConfig, it, openApi.paths, secSchemes) }
 
-        controllerClasses.each { processController(config, it, openApi.paths, secSchemes) }
 
-        new JsonBuilder(openApi).toPrettyString()
+        def builder = new JsonBuilder(openApi)
+        config.prettyJson ? builder.toPrettyString() : builder.toString()
     }
 
     private void processSecuritySchemes(List<ApiSecurityScheme> secSchemes) {
@@ -135,7 +154,7 @@ class OpenApiService {
 
             def securities = mergeAnnotations(field, ApiSecurity, ApiSecurities)
             def headers = mergeAnnotations(field, ApiHeader, ApiHeaders)
-            def params = mergeAnnotations(field, ApiParam, ApiParams)
+            def params = mergeAnnotations(field, ApiPathParam, ApiPathParams)
             def queries = mergeAnnotations(field, ApiQuery, ApiQueries)
             def cookies = mergeAnnotations(field, ApiCookie, ApiCookies)
 
@@ -169,11 +188,11 @@ class OpenApiService {
                 def contents = (requestBody.contents() ?: globalContents).toList()
                 operation.requestBody = [description: requestBody.description()]
 
-                if(requestBody.body() != Void || !requestBody.schema().name().empty) {
+                if(requestBody.body() != Void || requestBody.schema()) {
                     operation.requestBody.content = contents.inject([:]) {
                         acc, media ->
                             def schema = requestBody.body() == Void ?
-                                    resolveSchema(requestBody.schema(), requestBody.isList()) : resolveSchema(requestBody.body(), requestBody.isList())
+                                    resolveSchema(requestBody.schema().first(), requestBody.isList()) : resolveSchema(requestBody.body(), requestBody.isList())
                             acc + [(media.contentType()): [schema: schema]]
                     }
                 }
@@ -192,11 +211,11 @@ class OpenApiService {
                     contents = resp.contents().toList() ?: contents
 
                     def resDef = [description: resp.description() ?: "Status ${resp.statusCode()}"]
-                    if (resp.body() != Void || !resp.schema().name().empty) {
+                    if (resp.body() != Void || resp.schema()) {
                         resDef.content = contents.inject([:]) {
                             acc, media ->
                                 def schema = resp.body() == Void ?
-                                        resolveSchema(resp.schema(), resp.isList()) : resolveSchema(resp.body(), resp.isList())
+                                        resolveSchema(resp.schema().first(), resp.isList()) : resolveSchema(resp.body(), resp.isList())
                                 acc + [(media.contentType()): [schema: schema]]
                         }
                     }
@@ -214,7 +233,7 @@ class OpenApiService {
                             required   : p.required(),
                             description: p.description(),
                             example    : p.example(),
-                            schema     : getParameterSchema(p.type(), p.schema(), p.name(), fullPath)
+                            schema     : getParameterSchema(p.type(), p.schema().find(), p.name(), fullPath)
                     ]
                 }
             }
@@ -243,7 +262,7 @@ class OpenApiService {
                             required   : p.required(),
                             description: p.description(),
                             example    : p.example(),
-                            schema     : getParameterSchema(p.type(), p.schema(), p.name(), fullPath)
+                            schema     : getParameterSchema(p.type(), p.schema().find(), p.name(), fullPath)
                     ]
                 }
             }
@@ -257,7 +276,7 @@ class OpenApiService {
                             required   : p.required(),
                             description: p.description(),
                             example    : p.example(),
-                            schema     : getParameterSchema(p.type(), p.schema(), p.name(), fullPath)
+                            schema     : getParameterSchema(p.type(), p.schema().find(), p.name(), fullPath)
                     ]
                 }
             }
@@ -271,7 +290,7 @@ class OpenApiService {
 
     }
 
-    private Map getParameterSchema(Class type, ApiParameterSchema schema, String name, String path){
+    private Map getParameterSchema(Class type, ApiParam schema, String name, String path){
 
         if(type != Void) {
             if(type.isEnum()){
@@ -402,11 +421,11 @@ class OpenApiService {
 
                 def pname = f.name()
 
-                if(f.type() == Void && f.schema().name().empty)
+                if(f.type() == Void && !f.schema())
                     throw new Exception("Type not found to schema $name")
 
                 if (f.type() == Void) {
-                    props[pname] = mkRef(f.schema().name(), f.isList())
+                    props[pname] = mkRef(f.schema().first().name(), f.isList())
                 } else {
 
                     if(f.type().isEnum()){

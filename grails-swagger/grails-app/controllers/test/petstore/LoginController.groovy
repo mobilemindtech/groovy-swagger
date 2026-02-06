@@ -1,15 +1,7 @@
 package test.petstore
 
 
-import io.gswagger.annotations.ApiContent
-import io.gswagger.annotations.ApiOperation
-import io.gswagger.annotations.ApiRequestBody
-import io.gswagger.annotations.ApiResource
-import io.gswagger.annotations.ApiResponse
-import io.gswagger.annotations.ApiResponses
-import io.gswagger.annotations.ApiSchema
-import io.gswagger.annotations.ApiSchemaField
-import io.gswagger.annotations.ContentType
+import io.gswagger.annotations.*
 
 @ApiResource(path = "/login", contents = @ApiContent(contentType =  ContentType.JSON))
 class LoginController {

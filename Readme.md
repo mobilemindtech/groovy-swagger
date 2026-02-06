@@ -2,7 +2,7 @@
 
 `groovy-swagger` is a small Groovy-first library to **describe HTTP endpoints and data models using annotations**, then **generate an OpenAPI JSON** document at runtime by scanning your controllers (or by passing controller classes explicitly).
 
-It’s designed to be framework-light: the annotations live in `io.gswagger.*`, and the JSON generator is `io.gswagger.core.OpenApiService`.
+It’s designed to be framework-light: the annotations live in `io.gswagger.annotations.*`, and the JSON generator is `io.gswagger.core.OpenApiService`.
 
 ---
 
@@ -10,7 +10,7 @@ It’s designed to be framework-light: the annotations live in `io.gswagger.*`, 
 
 - Annotate controllers/resources (`@ApiResource`) and operations (`@ApiOperation`)
 - Describe request bodies (`@ApiRequestBody`) and responses (`@ApiResponse`, `@ApiResponses`)
-- Describe parameters in **path/query/header/cookie** (`@ApiParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`)
+- Describe parameters in **path/query/header/cookie** (`@ApiPathParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`)
 - Define schemas:
     - by annotating classes with `@ApiSchema` and fields with `@ApiSchemaField`, or
     - inline with `@ApiSchema(fields=[...])` inside request/response annotations
@@ -47,7 +47,7 @@ groovy dependencies { implementation "org.grails.plugins:grails-swagger:0.0.1" }
 Annotate a config class with `@ApiConfig`. This defines OpenAPI metadata and (optionally) global components like security schemes, servers, reusable schemas, and default contents.
 
 ```groovy
-import io.gswagger.*
+import io.gswagger.annotations.*
 @ApiConfig(
         title = "Pet Store",
         description = "Pet Store Swagger API demo",
@@ -73,7 +73,7 @@ class PetStoreConfig {}
 #### 2) Schemas
 
 ```groovy
-import io.gswagger.*
+import io.gswagger.annotations.*
 
 enum PetStatus{
   available, pending, sold
@@ -155,7 +155,7 @@ class User {
 ### 3) Annotate controllers
 ```groovy
 
-import io.gswagger.*
+import io.gswagger.annotations.*
 
 @ApiResource(path = "/user", contents = @ApiContent(contentType = ContentType.JSON))
 @ApiSecurity("JWTAuth")
@@ -169,14 +169,14 @@ class UserController {
     def create = {}
 
     @ApiOperation(path = "/{id}", description = "Show user")
-    @ApiParam(name = "id", type = Integer)
+    @ApiPathParam(name = "id", type = Integer)
     @ApiResponses([
             @ApiResponse(statusCode = 404, schema = @ApiSchema(name = "ApiResponse")),
             @ApiResponse(statusCode = 200, body = User)])
     def show = {}
 
     @ApiOperation(path = "/{id}", method = ApiMethod.DELETE, description = "Delete user")
-    @ApiParam(name = "id", type = Integer)
+    @ApiPathParam(name = "id", type = Integer)
     @ApiResponses([
             @ApiResponse(statusCode = 404, schema = @ApiSchema(name = "ApiResponse")),
             @ApiResponse(statusCode = 200)])
@@ -192,7 +192,7 @@ class UserController {
     def update = {}
 
     @ApiOperation(path = "/{id}", method = ApiMethod.DELETE, description = "List users")
-    @ApiQuery(name = "filterByName", schema = @ApiParameterSchema(type = String))
+    @ApiQuery(name = "filterByName", schema = @ApiParam(type = String))
     @ApiResponse(
             statusCode = 200,
             schema = @ApiSchema(
@@ -275,7 +275,7 @@ Typical responsibilities (depending on how your module is implemented):
 - optionally serving Swagger UI (if included)
 
 Because Grails wiring can vary by app setup, the stable part is still the same:
-**you annotate controllers with `io.gswagger.*` and generate JSON via `OpenApiService`.**
+**you annotate controllers with `io.gswagger.annotations.*` and generate JSON via `OpenApiService`.**
 
 A common pattern is to:
 
@@ -287,7 +287,7 @@ A common pattern is to:
 
 # Annotation reference
 
-This section explains **all** annotations and supporting enums/classes in `io.gswagger`.
+This section explains **all** annotations and supporting enums/classes in `io.gswagger.annotations`.
 
 ## Enums
 
@@ -418,7 +418,7 @@ Fields:
 
 ## Parameters schema helper
 
-### `@ApiParameterSchema` *(TYPE target in source; used as nested annotation)*
+### `@ApiParam` *(TYPE target in source; used as nested annotation)*
 Describes the schema of a parameter (query/path/header/cookie). Think of it as “JSON Schema-ish” constraints for parameters.
 
 Fields:
@@ -437,19 +437,19 @@ Fields:
 - `format()` *(String)*: OpenAPI format (e.g., `"int64"`, `"date-time"`, etc.).
 - `defaultValue()` *(String)*: default value.
 
-Used inside: `@ApiParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`
+Used inside: `@ApiPathParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`
 
 ---
 
 ## Path parameters
 
-### `@ApiParam` *(FIELD, METHOD)*
+### `@ApiPathParam` *(FIELD, METHOD)*
 Declares a **path parameter** (OpenAPI `in: path`).
 
 Fields:
 
 - `name()` *(String, required)*
-- `schema()` *(ApiParameterSchema)*: rich schema details.
+- `schema()` *(ApiParam)*: rich schema details.
 - `type()` *(Class, default `Void`)*: shorthand type; if set, generator uses it directly.
 - `description()` *(String)*
 - `since()` *(String)*
@@ -458,12 +458,12 @@ Fields:
 - `allowEmptyValue()` *(boolean)*
 
 
-### `@ApiParams` *(FIELD, METHOD)*
-Container for multiple `@ApiParam`.
+### `@ApiPathParams` *(FIELD, METHOD)*
+Container for multiple `@ApiPathParam`.
 
 Fields:
 
-- `value()` *(ApiParam[])*
+- `value()` *(ApiPathParam[])*
 
 ---
 
@@ -475,7 +475,7 @@ Declares a **cookie parameter** (OpenAPI `in: cookie`).
 Fields:
 
 - `name()` *(String, required)*
-- `schema()` *(ApiParameterSchema)*
+- `schema()` *(ApiParam)*
 - `type()` *(Class, default `Void`)*
 - `description()` *(String)*
 - `example()` *(String)*
@@ -500,7 +500,7 @@ Declares a **query parameter** (OpenAPI `in: query`).
 Fields:
 
 - `name()` *(String, required)*
-- `schema()` *(ApiParameterSchema)*
+- `schema()` *(ApiParam)*
 - `type()` *(Class, default `Void`)*
 - `description()` *(String)*
 - `required()` *(boolean, default `false`)*
@@ -547,7 +547,7 @@ Fields:
 - `description()` *(String)*
 - `required()` *(boolean)*
 - `example()` *(String)*
-- `schema()` *(ApiParameterSchema)*
+- `schema()` *(ApiParam)*
 - `type()` *(Class, default `Void`)*
 - `since()` *(String)*
 
@@ -658,9 +658,9 @@ Fields:
 
 ## Small gotchas / conventions
 
-- For parameters (`@ApiParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`):
+- For parameters (`@ApiPathParam`, `@ApiQuery`, `@ApiHeader`, `@ApiCookie`):
     - If you set `type = SomeClass`, the generator can infer OpenAPI `type`.
-    - Otherwise, you must set `schema.type()` in `@ApiParameterSchema`, or generation will fail for that parameter.
+    - Otherwise, you must set `schema.type()` in `@ApiParam`, or generation will fail for that parameter.
 - For schemas:
     - If you use `body = SomeClass`, that class must be annotated with `@ApiSchema` or generation will fail.
     - If you use `schema = @ApiSchema(name="X", fields=[...])`, ensure `name` is set (it becomes the component key).
