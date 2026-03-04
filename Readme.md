@@ -35,7 +35,7 @@ groovy dependencies { implementation "io.groovy.swagger:groovy-swagger:0.0.1" }
 If you use grails
 
 ```groovy
-groovy dependencies { implementation "org.grails.plugins:grails-swagger:0.0.1" }
+groovy dependencies { implementation "org.apache.grails:grails-swagger:0.0.1" }
 ```
 
 ---

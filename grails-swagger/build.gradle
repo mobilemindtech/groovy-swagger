@@ -17,6 +17,7 @@ plugins {
     id "war"
     id "idea"
     id "eclipse"
+    id 'maven-publish'
 }
 
 // Not Published to Gradle Plugin Portal
@@ -24,7 +25,8 @@ apply plugin: "org.apache.grails.gradle.grails-gsp"
 apply plugin: "org.apache.grails.gradle.grails-plugin"
 apply plugin: "cloud.wondrify.asset-pipeline"
 
-group = "org.grails.plugins"
+group = "org.apache.grails"
+version = "0.0.1"
 
 repositories {
     mavenCentral()
@@ -96,4 +98,12 @@ assets {
 // https://github.com/apache/grails-core/issues/15321
 tasks.withType(GroovyCompile).configureEach {
     groovyOptions.optimizationOptions.indy = false
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
 }
