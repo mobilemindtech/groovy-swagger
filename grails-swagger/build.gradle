@@ -4,11 +4,15 @@ buildscript {
         maven {
            url = 'https://repo.grails.org/grails/restricted'
         }
+        maven {
+            // grails-gradle-plugins 8.0.0-M6 is not Gradle 9 compatible; the fix is only in snapshots
+            url = 'https://repository.apache.org/content/repositories/snapshots/'
+        }
     }
     dependencies { // Not Published to Gradle Plugin Portal
         classpath "cloud.wondrify:asset-pipeline-gradle"
         classpath "org.apache.grails:grails-data-hibernate7"
-        classpath "org.apache.grails:grails-gradle-plugins"
+        classpath "org.apache.grails:grails-gradle-plugins:8.0.0-SNAPSHOT"
         classpath platform("org.apache.grails:grails-hibernate7-bom:$grailsVersion")
     }
 }

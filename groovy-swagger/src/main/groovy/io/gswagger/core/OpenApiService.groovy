@@ -1,6 +1,5 @@
 package io.gswagger.core
 
-import com.google.common.reflect.ClassPath
 import groovy.json.JsonBuilder
 import groovy.transform.TupleConstructor
 import groovy.util.logging.Slf4j
@@ -33,7 +32,8 @@ import java.lang.annotation.Annotation
 import java.lang.reflect.Field
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
-import java.util.stream.Collectors
+import java.net.JarURLConnection
+import java.util.jar.JarEntry
 
 @Slf4j
 class OpenApiService {
@@ -51,8 +51,23 @@ class OpenApiService {
     String makeJSON(Map config) {
         makeJSON(new Config(config))
     }
-    
+
     String makeJSON(Config config) {
+        def builder = new JsonBuilder(makeSpec(config))
+        config.prettyJson ? builder.toPrettyString() : builder.toString()
+    }
+
+    Map makeSpec(Map config) {
+        makeSpec(new Config(config))
+    }
+
+    /**
+     * Builds the OpenAPI document as a Map (the same structure serialized by makeJSON).
+     * Synchronized because the schema registry (components) is instance state.
+     */
+    synchronized Map makeSpec(Config config) {
+
+        components = [schemas: [:], securitySchemes: [:]]
 
         assert config.configClass : "configClass is required"
         assert config.packageName || config.classes : "classes or packageName is required"
@@ -92,9 +107,7 @@ class OpenApiService {
 
         controllers.each { processController(apiConfig, it, openApi.paths, secSchemes) }
 
-
-        def builder = new JsonBuilder(openApi)
-        config.prettyJson ? builder.toPrettyString() : builder.toString()
+        openApi
     }
 
     private void processSecuritySchemes(List<ApiSecurityScheme> secSchemes) {
@@ -341,6 +354,7 @@ class OpenApiService {
 
         if (!components.schemas.containsKey(name)) {
             Map props = [:]
+            List<String> required = []
             clazz.declaredFields
                     .grep {  !it.synthetic }
                     .findAll { it.isAnnotationPresent(ApiSchemaField) }
@@ -351,6 +365,8 @@ class OpenApiService {
                         def pname = ann.name() ?: f.name
                         def pIsList = Collection.isAssignableFrom(f.type)
                         def isEnum = type.isEnum()
+
+                        if (ann.required()) required << pname
 
                         if(isEnum){
                             props[pname] = [
@@ -376,7 +392,7 @@ class OpenApiService {
                                 ]
 
                                 if(ann.options()){
-                                    props[pname]= ['enum': ann.options()]
+                                    props[pname].'enum' = ann.options()
                                 }
 
                                 if (pIsList) {
@@ -397,6 +413,7 @@ class OpenApiService {
                     description: schema.description(),
                     properties: props
             ]
+            if (required) components.schemas[name].required = required
         }
 
         def ref = [ '$ref': "#/components/schemas/$name" ]
@@ -417,9 +434,12 @@ class OpenApiService {
 
         if (!components.schemas.containsKey(name)) {
             Map props = [:]
+            List<String> required = []
             schema.fields().each {f ->
 
                 def pname = f.name()
+
+                if (f.required()) required << pname
 
                 if(f.type() == Void && !f.schema())
                     throw new Exception("Type not found to schema $name")
@@ -450,6 +470,7 @@ class OpenApiService {
             }
 
             components.schemas[name] = [type: "object", properties: props]
+            if (required) components.schemas[name].required = required
         }
 
         mkRef(name, isList)
@@ -484,15 +505,47 @@ class OpenApiService {
         }
     }
 
+    /**
+     * Classes (including nested ones) declared directly in the package, from directories and jars
+     * on the context class loader. Replaces Guava's ClassPath to keep the library dependency-free.
+     */
     private Set<Class> findAllClassesInPackage(String packageName) {
         def classLoader = Thread.currentThread().contextClassLoader
-        def classPath = ClassPath.from(classLoader)
+        def packagePath = packageName.replace('.', '/')
+        Set<String> classNames = [] as Set
 
-        classPath.getAllClasses()
-                .stream()
-                .filter { clazz -> clazz.getPackageName() == packageName }
-                .map { clazzInfo -> clazzInfo.load() }
-                .filter { cls -> cls.isAnnotationPresent(ApiResource) }
-                .collect(Collectors.toSet())
+        classLoader.getResources(packagePath).each { URL url ->
+            switch (url.protocol) {
+                case 'file':
+                    new File(url.toURI()).listFiles()?.each { File f ->
+                        if (f.isFile() && f.name.endsWith('.class'))
+                            classNames << "${packageName}.${f.name - '.class'}".toString()
+                    }
+                    break
+                case 'jar':
+                    def connection = url.openConnection() as JarURLConnection
+                    connection.useCaches = false
+                    connection.jarFile.entries().each { JarEntry entry ->
+                        def entryName = entry.name
+                        if (entryName.startsWith(packagePath + '/') && entryName.endsWith('.class')
+                                && entryName.indexOf('/', packagePath.length() + 1) == -1) {
+                            classNames << entryName.substring(0, entryName.length() - 6).replace('/', '.')
+                        }
+                    }
+                    break
+                default:
+                    log.warn("Unsupported class path URL for package scan: {}", url)
+            }
+        }
+
+        classNames.findResults { String className ->
+            try {
+                def clazz = Class.forName(className, false, classLoader)
+                clazz.isAnnotationPresent(ApiResource) ? clazz : null
+            } catch (Throwable e) {
+                log.debug("Skipping class {}: {}", className, e.message)
+                null
+            }
+        } as Set<Class>
     }
 }

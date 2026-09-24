@@ -283,6 +283,75 @@ A common pattern is to:
 - annotate Grails controllers with `@ApiResource`, `@ApiOperation`, etc.
 - expose the generated JSON via a controller action
 
+## Request / response validation
+
+The generated document can be used to validate traffic: requests and responses of documented
+operations are checked against the declared parameters, content types, bodies (JSON Schema subset)
+and status codes. No third-party library is used.
+
+### Configuration (`application.yml`)
+
+```yaml
+grails:
+  plugins:
+    swagger:
+      config: my.app.ApiConfig        # @ApiConfig class
+      package: my.app.api             # package scanned for @ApiResource controllers
+      validation:
+        enabled: true                 # registers the servlet filter (default false)
+        urlPatterns: ['/api/*']       # default ['/*']
+        request:
+          enforce: true               # true: invalid request -> 400 with the errors; false (default): log only
+        response:
+          enabled: true               # validate responses at all (default true)
+          enforce: true               # true: invalid response -> 500 with the errors; false (default): log only
+        additionalProperties: false   # accept undocumented JSON properties (default true)
+        allowNullValues: true         # accept null in non-required properties (default true)
+        failOnUndocumentedStatus: true # response status must be documented (default true)
+        basePath: /api                # prefix removed before matching paths (default: path of servers[].url)
+        order: 2147483547             # filter order (default runs after Spring Security)
+```
+
+Error body (400 / 500):
+
+```json
+{
+  "message": "Request does not match the API documentation",
+  "operation": "POST /customer",
+  "errors": [
+    {"location": "body.name", "message": "is required"},
+    {"location": "query.limit", "message": "must be <= 100"}
+  ]
+}
+```
+
+- Undocumented routes are not validated (and their bodies are not buffered).
+- Only JSON bodies (`application/json`, `*+json`) are schema-validated; form bodies are not read, so
+  `params` keep working.
+- Required fields come from `@ApiSchemaField(required = true)`.
+- Security requirements are not validated (Spring Security answers first).
+
+### Using the validation without the servlet filter
+
+`OpenApiValidationService` (Grails bean) and `io.gswagger.validation.OpenApiValidator` (plain Groovy)
+don't depend on the servlet API:
+
+```groovy
+def request = new HttpData().method('POST').path('/api/customer')
+        .header('X-Tenant', '1')
+        .body('application/json', '{"name":"Ana"}')
+
+ValidationResult result = openApiValidationService.validateRequest(request)
+result.valid          // false when something doesn't match
+result.errors         // [ValidationError(location, message)]
+
+openApiValidationService.validateResponse(request, 201, 'application/json', responseJson)
+
+// outside Grails
+def validator = new OpenApiValidator(new OpenApiService().makeSpec(configClass: ApiConfig, packageName: 'my.app.api'),
+                                     new ValidationOptions(allowAdditionalProperties: false))
+```
+
 ---
 
 # Annotation reference
