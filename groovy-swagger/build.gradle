@@ -27,13 +27,8 @@ dependencies {
     // Use the latest Groovy version for building this library
     implementation libs.groovy
     implementation libs.groovy.json
-
     // This dependency is used internally, and not exposed to consumers on their own compile classpath.
-    implementation libs.guava
     implementation libs.slf4j
-
-    // This dependency is exported to consumers, that is to say found on their compile classpath.
-    api libs.commons.math3
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
